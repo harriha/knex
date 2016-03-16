@@ -1,8 +1,8 @@
 
 var QueryBuilder = require('./query/builder')
 var Raw          = require('./raw')
-var assign       = require('lodash/object/assign')
-var transform    = require('lodash/object/transform')
+
+import {assign, transform} from 'lodash'
 
 function Formatter(client) {
   this.client       = client
@@ -54,6 +54,7 @@ assign(Formatter.prototype, {
       return this.outputQuery(query, isParameter);
     }
     if (value instanceof Raw) {
+      value.client = this.client;
       query = value.toSQL()
       if (query.bindings) {
         this.bindings = this.bindings.concat(query.bindings);
@@ -83,6 +84,10 @@ assign(Formatter.prototype, {
     if (raw) return raw;
     if (typeof value === 'number') return value;
     return this._wrapString(value + '');
+  },
+
+  wrapAsIdentifier: function wrapAsIdentifier(value) {
+    return this.client.wrapIdentifier((value || '').trim());
   },
 
   alias: function(first, second) {
@@ -140,7 +145,7 @@ assign(Formatter.prototype, {
     if (asIndex !== -1) {
       var first  = value.slice(0, asIndex)
       var second = value.slice(asIndex + 4)
-      return this.alias(this.wrap(first), this.wrap(second))
+      return this.alias(this.wrap(first), this.wrapAsIdentifier(second))
     }
     var i = -1, wrapped = [];
     segments = value.split('.');
@@ -162,9 +167,9 @@ var orderBys  = ['asc', 'desc'];
 
 // Turn this into a lookup map
 var operators = transform([
-  '=', '<', '>', '<=', '>=', '<>', '!=', 'like', 
-  'not like', 'between', 'ilike', '&', '|', '^', '<<', '>>', 
-  'rlike', 'regexp', 'not regexp', '~', '~*', '!~', '!~*', 
+  '=', '<', '>', '<=', '>=', '<>', '!=', 'like',
+  'not like', 'between', 'ilike', '&', '|', '^', '<<', '>>',
+  'rlike', 'regexp', 'not regexp', '~', '~*', '!~', '!~*',
   '#', '&&', '@>', '<@', '||'
 ], function(obj, key) {
   obj[key] = true

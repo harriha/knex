@@ -12,8 +12,8 @@ function raw(sql, bindings) {
 test('allows for ?? to interpolate identifiers', function(t) {
   t.plan(1)
   t.equal(
-    raw('select * from ?? where id = ?', ['table', 1]).toString(), 
-    'select * from "table" where id = 1'
+    raw('select * from ?? where id = ? and ?? = ??', ['table', 1, 'table.first', 'table.second']).toString(),
+    'select * from "table" where id = 1 and "table"."first" = "table"."second"'
   )
 })
 
@@ -33,6 +33,30 @@ test('allows for :val: for interpolated identifiers', function(t) {
   )
 })
 
+test('allows use :val: in start of raw query', function(t) {
+  t.plan(1)
+  t.equal(
+    raw(':userIdCol: = :userId', {userIdCol: 'table', userId: 1}).toString(),
+    "\"table\" = 1"
+  )
+})
+
+test('allows use :val in start of raw query', function(t) {
+  t.plan(1)
+  t.equal(
+    raw(':userId', {userId: 1}).toString(),
+    "1"
+  )
+})
+
+test('allows for :val: to be interpolated when identifiers with dots', function(t) {
+  t.plan(1)
+  t.equal(
+    raw('select * from "table" join "chair" on :tableCol: = :chairCol:', {tableCol: 'table.id', chairCol: 'chair.table_id'}).toString(),
+    'select * from "table" join "chair" on "table"."id" = "chair"."table_id"'
+  )
+})
+
 test('allows for options in raw queries, #605', function(t) {
   t.plan(1)
   var x = raw("select 'foo', 'bar';")
@@ -47,13 +71,13 @@ test('allows for options in raw queries, #605', function(t) {
   })
 })
 
-test('raw query strings with keys replace values', function(t) {
+test('undefined named bindings are ignored', function(t) {
   
   t.plan(2)
   
-  t.equal(raw('select :item from :place', {}).toSQL().sql, 'select from')
+  t.equal(raw('select :item from :place', {}).toSQL().sql, 'select :item from :place')
 
-  t.equal(raw('select :item :cool 2 from :place', {}).toSQL().sql, 'select 2 from')
+  t.equal(raw('select :item :cool 2 from :place', {item: 'col1'}).toSQL().sql, 'select ? :cool 2 from :place')
 
 })
 

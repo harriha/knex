@@ -4,7 +4,9 @@
 
 var inherits       = require('inherits');
 var ColumnCompiler = require('../../../schema/columncompiler');
-var assign         = require('lodash/object/assign');
+var helpers        = require('../../../helpers');
+
+import {assign} from 'lodash'
 
 function ColumnCompiler_PG() {
   ColumnCompiler.apply(this, arguments);
@@ -19,11 +21,11 @@ assign(ColumnCompiler_PG.prototype, {
   bigincrements: 'bigserial primary key',
   bigint: 'bigint',
   binary: 'bytea',
-  
+
   bit: function(column) {
     return column.length !== false ? 'bit(' + column.length + ')' : 'bit';
   },
-  
+
   bool: 'boolean',
 
   // Create the column definition for an enum type.
@@ -36,8 +38,11 @@ assign(ColumnCompiler_PG.prototype, {
   floating: 'real',
   increments: 'serial primary key',
   json: function(jsonb) {
-    if (!this.client.version || parseFloat(this.client.version) >= 9.2) return jsonb ? 'jsonb' : 'json';
-    return 'text';
+    if (jsonb) helpers.deprecate('json(true)', 'jsonb()')
+    return jsonColumn(this.client, jsonb);
+  },
+  jsonb: function() {
+    return jsonColumn(this.client, true);
   },
   smallint: 'smallint',
   tinyint:  'smallint',
@@ -59,5 +64,10 @@ assign(ColumnCompiler_PG.prototype, {
   }
 
 })
+
+function jsonColumn(client, jsonb) {
+  if (!client.version || parseFloat(client.version) >= 9.2) return jsonb ? 'jsonb' : 'json';
+  return 'text';
+}
 
 module.exports = ColumnCompiler_PG;

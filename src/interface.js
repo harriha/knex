@@ -1,16 +1,15 @@
 
 var helpers = require('./helpers')
+import {isArray, map, clone, each} from 'lodash'
 
 module.exports = function(Target) {
-  var _         = require('lodash');
-  var SqlString = require('./query/string');
 
   Target.prototype.toQuery = function(tz) {
     var data = this.toSQL(this._method);
-    if (!_.isArray(data)) data = [data];
-    return _.map(data, function(statement) {
+    if (!isArray(data)) data = [data];
+    return map(data, (statement) => {
       return this._formatQuery(statement.sql, statement.bindings, tz);
-    }, this).join(';\n');
+    }).join(';\n');
   };
 
   // Format the query as sql, prepping bindings as necessary.
@@ -18,7 +17,7 @@ module.exports = function(Target) {
     if (this.client && this.client.prepBindings) {
       bindings = this.client.prepBindings(bindings, tz);
     }
-    return SqlString.format(sql, bindings, tz);
+    return this.client.SqlString.format(sql, bindings, tz);
   };
 
   // Create a new instance of the `Runner`, passing in the current object.
@@ -31,7 +30,7 @@ module.exports = function(Target) {
   // items, like the `mysql` and `sqlite3` drivers.
   Target.prototype.options = function(opts) {
     this._options = this._options || [];
-    this._options.push(_.clone(opts) || {});
+    this._options.push(clone(opts) || {});
     this._cached  = undefined
     return this;
   };
@@ -72,9 +71,9 @@ module.exports = function(Target) {
 
   // Creates a method which "coerces" to a promise, by calling a
   // "then" method on the current `Target`
-  _.each(['bind', 'catch', 'finally', 'asCallback', 
+  each(['bind', 'catch', 'finally', 'asCallback',
     'spread', 'map', 'reduce', 'tap', 'thenReturn',
-    'return', 'yield', 'ensure', 'nodeify', 'exec'], function(method) {
+    'return', 'yield', 'ensure', 'exec', 'reflect'], function(method) {
     Target.prototype[method] = function() {
       var then = this.then();
       then = then[method].apply(then, arguments);

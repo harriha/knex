@@ -1,22 +1,21 @@
 
 // Query Compiler
 // -------
-var _       = require('lodash');
 var helpers = require('../helpers');
 var Raw     = require('../raw');
-var assign  = require('lodash/object/assign')
-var reduce  = require('lodash/collection/reduce');
+import {assign, reduce, groupBy, isString, compact, isEmpty, isUndefined, bind, map, omitBy} from 'lodash'
 
 // The "QueryCompiler" takes all of the query statements which
 // have been gathered in the "QueryBuilder" and turns them into a
 // properly formatted / bound query string.
 function QueryCompiler(client, builder) {
-  this.client      = client
-  this.method      = builder._method || 'select';
-  this.options     = builder._options;
-  this.single      = builder._single;
-  this.grouped     = _.groupBy(builder._statements, 'grouping');
-  this.formatter   = client.formatter()
+  this.client    = client
+  this.method    = builder._method || 'select';
+  this.options   = builder._options;
+  this.single    = builder._single;
+  this.timeout   = builder._timeout || false;
+  this.grouped   = groupBy(builder._statements, 'grouping');
+  this.formatter = client.formatter()
 }
 
 var components = [
@@ -36,9 +35,10 @@ assign(QueryCompiler.prototype, {
     var defaults = {
       method: method,
       options: reduce(this.options, assign, {}),
+      timeout: this.timeout,
       bindings: this.formatter.bindings
     };
-    if (_.isString(val)) {
+    if (isString(val)) {
       val = {sql: val};
     }
     if (method === 'select' && this.single.as) {
@@ -55,9 +55,9 @@ assign(QueryCompiler.prototype, {
     while (++i < components.length) {
       statements.push(this[components[i]](this));
     }
-    return _.compact(statements).join(' ');
+    return compact(statements).join(' ');
   },
-  
+
   pluck: function() {
     return {
       sql: this.select(),
@@ -75,7 +75,7 @@ assign(QueryCompiler.prototype, {
       if (insertValues.length === 0) {
         return ''
       }
-    } else if (typeof insertValues === 'object' && _.isEmpty(insertValues)) {
+    } else if (typeof insertValues === 'object' && isEmpty(insertValues)) {
       return sql + this._emptyInsertValue
     }
 
@@ -84,7 +84,7 @@ assign(QueryCompiler.prototype, {
       sql += insertData;
     } else  {
       if (insertData.columns.length) {
-        sql += '(' + this.formatter.columnize(insertData.columns) 
+        sql += '(' + this.formatter.columnize(insertData.columns)
         sql += ') values ('
         var i = -1
         while (++i < insertData.values.length) {
@@ -124,27 +124,28 @@ assign(QueryCompiler.prototype, {
         if (stmt.distinct) distinct = true
         if (stmt.type === 'aggregate') {
           sql.push(this.aggregate(stmt))
-        } 
+        }
         else if (stmt.value && stmt.value.length > 0) {
           sql.push(this.formatter.columnize(stmt.value))
         }
       }
     }
     if (sql.length === 0) sql = ['*'];
-    return 'select ' + (distinct ? 'distinct ' : '') + 
+    return 'select ' + (distinct ? 'distinct ' : '') +
       sql.join(', ') + (this.tableName ? ' from ' + this.tableName : '');
   },
 
   aggregate: function(stmt) {
     var val = stmt.value;
     var splitOn = val.toLowerCase().indexOf(' as ');
+    var distinct = stmt.aggregateDistinct ? 'distinct ' : '';
     // Allows us to speciy an alias for the aggregate types.
     if (splitOn !== -1) {
       var col = val.slice(0, splitOn);
       var alias = val.slice(splitOn + 4);
-      return stmt.method + '(' + this.formatter.wrap(col) + ') as ' + this.formatter.wrap(alias);
+      return stmt.method + '(' + distinct + this.formatter.wrap(col) + ') as ' + this.formatter.wrap(alias);
     }
-    return stmt.method + '(' + this.formatter.wrap(val) + ')';
+    return stmt.method + '(' + distinct + this.formatter.wrap(val) + ')';
   },
 
   // Compiles all each of the `join` clauses on the query,
@@ -165,8 +166,8 @@ assign(QueryCompiler.prototype, {
           var clause = join.clauses[ii]
           sql += ' ' + (ii > 0 ? clause[0] : clause[1]) + ' '
           sql += this.formatter.wrap(clause[2])
-          if (!_.isUndefined(clause[3])) sql += ' ' + this.formatter.operator(clause[3])
-          if (!_.isUndefined(clause[4])) sql += ' ' + this.formatter.wrap(clause[4])
+          if (!isUndefined(clause[3])) sql += ' ' + this.formatter.operator(clause[3])
+          if (!isUndefined(clause[4])) sql += ' ' + this.formatter.wrap(clause[4])
         }
       }
     }
@@ -339,7 +340,7 @@ assign(QueryCompiler.prototype, {
 
   whereBetween: function(statement) {
     return this.formatter.wrap(statement.column) + ' ' + this._not(statement, 'between') + ' ' +
-      _.map(statement.value, this.formatter.parameter, this.formatter).join(' and ');
+      map(statement.value, bind(this.formatter.parameter, this.formatter)).join(' and ');
   },
 
   // Compiles a "whereRaw" query.
@@ -357,7 +358,7 @@ assign(QueryCompiler.prototype, {
     if (statement.not) return 'not ' + str;
     return str;
   },
-  
+
   _prepInsert: function(data) {
     var isRaw = this.formatter.rawOrFn(data);
     if (isRaw) return isRaw;
@@ -395,6 +396,7 @@ assign(QueryCompiler.prototype, {
 
   // "Preps" the update.
   _prepUpdate: function(data) {
+    data = omitBy(data, isUndefined)
     var vals   = []
     var sorted = Object.keys(data).sort()
     var i      = -1

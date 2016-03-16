@@ -1,10 +1,10 @@
 
 // Raw
 // -------
-var inherits     = require('inherits')
-var EventEmitter = require('events').EventEmitter
-var assign       = require('lodash/object/assign')
-var reduce       = require('lodash/collection/reduce')
+var inherits      = require('inherits')
+var EventEmitter  = require('events').EventEmitter
+
+import {assign, reduce, isPlainObject, isObject, isUndefined, isNumber} from 'lodash'
 
 function Raw(client) {
   this.client   = client
@@ -16,17 +16,25 @@ function Raw(client) {
   // Todo: Deprecate
   this._wrappedBefore = undefined
   this._wrappedAfter  = undefined
-  this._debug         = client && client.options && client.options.debug
+  this._debug         = client && client.config && client.config.debug
 }
 inherits(Raw, EventEmitter)
 
 assign(Raw.prototype, {
 
-  set: function(sql, bindings) {    
+  set: function(sql, bindings) {
     this._cached  = undefined
     this.sql      = sql
-    this.bindings = bindings
+    this.bindings = (isObject(bindings) || isUndefined(bindings)) ?  bindings : [bindings]
+
     return this
+  },
+
+  timeout: function(ms) {
+    if(isNumber(ms) && ms > 0) {
+      this._timeout = ms;
+    }
+    return this;
   },
 
   // Wraps the current sql with `before` and `after`.
@@ -46,8 +54,8 @@ assign(Raw.prototype, {
   toSQL: function() {
     if (this._cached) return this._cached
     if (Array.isArray(this.bindings)) {
-      this._cached = replaceRawArrBindings(this) 
-    } else if (this.bindings && typeof this.bindings === 'object') {
+      this._cached = replaceRawArrBindings(this)
+    } else if (this.bindings && isPlainObject(this.bindings)) {
       this._cached = replaceKeyBindings(this)
     } else {
       this._cached = {
@@ -63,6 +71,9 @@ assign(Raw.prototype, {
       this._cached.sql = this._cached.sql + this._wrappedAfter
     }
     this._cached.options = reduce(this._options, assign, {})
+    if(this._timeout) {
+      this._cached.timeout = this._timeout;
+    }
     return this._cached
   }
 
@@ -74,20 +85,24 @@ function replaceRawArrBindings(raw) {
   var client           = raw.client
   var index            = 0;
   var bindings         = []
-  
-  var sql = raw.sql.replace(/\?\??/g, function(match) {
+
+  var sql = raw.sql.replace(/\\?\?\??/g, function(match) {
+    if (match === '\\?') {
+      return match
+    }
+
     var value = values[index++]
-    
+
     if (value && typeof value.toSQL === 'function') {
       var bindingSQL = value.toSQL()
       if (bindingSQL.bindings !== undefined) {
-        bindings = bindings.concat(bindingSQL.bindings)  
+        bindings = bindings.concat(bindingSQL.bindings)
       }
       return bindingSQL.sql
     }
 
     if (match === '??') {
-      return client.wrapIdentifier(value)
+      return client.formatter().columnize(value)
     }
     bindings.push(value)
     return '?'
@@ -109,20 +124,23 @@ function replaceKeyBindings(raw) {
   var client   = raw.client
   var sql      = raw.sql, bindings = []
 
-  var regex = new RegExp('\\s(\\:\\w+\\:?)', 'g')
-  sql = raw.sql.replace(regex, function(full, key) {
+  var regex = new RegExp('(\\:\\w+\\:?)', 'g')
+  sql = raw.sql.replace(regex, function(full) {
+    var key = full.trim();
     var isIdentifier = key[key.length - 1] === ':'
     var value = isIdentifier ? values[key.slice(1, -1)] : values[key.slice(1)]
-    if (value === undefined) return ''
+    if (value === undefined) {
+      return full;
+    }
     if (value && typeof value.toSQL === 'function') {
       var bindingSQL = value.toSQL()
       if (bindingSQL.bindings !== undefined) {
-        bindings = bindings.concat(bindingSQL.bindings)  
+        bindings = bindings.concat(bindingSQL.bindings)
       }
       return full.replace(key, bindingSQL.sql)
     }
     if (isIdentifier) {
-      return full.replace(key, client.wrapIdentifier(value))
+      return full.replace(key, client.formatter().columnize(value))
     }
     bindings.push(value)
     return full.replace(key, '?')

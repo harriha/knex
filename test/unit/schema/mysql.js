@@ -20,6 +20,16 @@ describe(dialect + " SchemaBuilder", function() {
   var tableSql;
   var equal = require('assert').equal;
 
+  it('basic create table with column collate', function() {
+    tableSql = client.schemaBuilder().createTable('users', function (table) {
+      table.increments('id');
+      table.string('email').collate('utf8_unicode_ci');
+    }).toSQL();
+
+    equal(1, tableSql.length);
+    expect(tableSql[0].sql).to.equal('create table `users` (`id` int unsigned not null auto_increment primary key, `email` varchar(255) collate \'utf8_unicode_ci\')');
+  });
+
   it('test basic create table with charset and collate', function() {
     tableSql = client.schemaBuilder().createTable('users', function(table) {
       table.increments('id');
@@ -476,6 +486,14 @@ describe(dialect + " SchemaBuilder", function() {
 
     equal(1, tableSql.length);
     expect(tableSql[0].sql).to.equal('create table `default_raw_test` (`created_at` timestamp default CURRENT_TIMESTAMP)');
+  });
+
+  it('sets myISAM engine', function() {
+    tableSql = client.schemaBuilder().createTable('users', function(t) {
+      t.string('username');
+      t.engine('myISAM');
+    }).toSQL();
+    expect(tableSql[0].sql).to.equal('create table `users` (`username` varchar(255)) engine = myISAM');
   });
 
 });

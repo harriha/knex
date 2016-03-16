@@ -15,25 +15,26 @@ function Transaction_WebSQL(client, container) {
 inherits(Transaction_WebSQL, EventEmitter)
 
 function makeClient(trx, client) {
-  
+
   var trxClient                = Object.create(client.constructor.prototype)
   trxClient.config             = client.config
   trxClient.connectionSettings = client.connectionSettings
   trxClient.transacting        = true
-  
+
   trxClient.on('query', function(arg) {
     trx.emit('query', arg)
+    client.emit('query', arg)
   })
   trxClient.commit = function() {}
   trxClient.rollback = function() {}
 
-  return trxClient  
+  return trxClient
 }
 
 var promiseInterface = [
-  'then', 'bind', 'catch', 'finally', 'asCallback', 
+  'then', 'bind', 'catch', 'finally', 'asCallback',
   'spread', 'map', 'reduce', 'tap', 'thenReturn',
-  'return', 'yield', 'ensure', 'nodeify', 'exec'
+  'return', 'yield', 'ensure', 'exec', 'reflect'
 ]
 
 // Creates a method which "coerces" to a promise, by calling a

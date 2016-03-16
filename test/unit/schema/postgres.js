@@ -91,7 +91,7 @@ describe("PostgreSQL SchemaBuilder", function() {
       table.dropPrimary();
     }).toSQL();
     equal(1, tableSql.length);
-    expect(tableSql[0].sql).to.equal('alter table "users" drop constraint users_pkey');
+    expect(tableSql[0].sql).to.equal('alter table "users" drop constraint "users_pkey"');
   });
 
   it("drop unique", function() {
@@ -442,6 +442,14 @@ describe("PostgreSQL SchemaBuilder", function() {
     expect(tableSql[0].sql).to.equal('alter table "users" add column "created_at" timestamptz, add column "updated_at" timestamptz');
   });
 
+  it("adding timestamps with defaults", function() {
+    tableSql = client.schemaBuilder().table('users', function(table) {
+      table.timestamps(false, true);
+    }).toSQL();
+    equal(1, tableSql.length);
+    expect(tableSql[0].sql).to.equal('alter table "users" add column "created_at" timestamptz not null default CURRENT_TIMESTAMP, add column "updated_at" timestamptz not null default CURRENT_TIMESTAMP');
+  });
+
   it("adding binary", function() {
     tableSql = client.schemaBuilder().table('users', function(table) {
       table.binary('foo');
@@ -452,7 +460,7 @@ describe("PostgreSQL SchemaBuilder", function() {
 
   it('adding jsonb', function() {
     tableSql = client.schemaBuilder().table('user', function(t) {
-      t.json('preferences', true);
+      t.jsonb('preferences');
     }).toSQL();
     expect(tableSql[0].sql).to.equal('alter table "user" add column "preferences" jsonb');
   });
@@ -489,6 +497,22 @@ describe("PostgreSQL SchemaBuilder", function() {
   it('allows dropping an extension only if it exists', function() {
     var sql = client.schemaBuilder().dropExtensionIfExists('test').toSQL();
     expect(sql[0].sql).to.equal('drop extension if exists "test"');
+  });
+
+  it('table inherits another table', function() {
+    tableSql = client.schemaBuilder().createTable('inheriteeTable', function(t) {
+      t.string('username');
+      t.inherits('inheritedTable');
+    }).toSQL();
+    expect(tableSql[0].sql).to.equal('create table "inheriteeTable" ("username" varchar(255)) inherits ("inheritedTable")');
+  });
+
+  it('should warn on disallowed method', function() {
+    tableSql = client.schemaBuilder().createTable('users', function(t) {
+      t.string('username');
+      t.engine('myISAM');
+    }).toSQL();
+    expect(tableSql[0].sql).to.equal('create table "users" ("username" varchar(255))');
   });
 
 });
